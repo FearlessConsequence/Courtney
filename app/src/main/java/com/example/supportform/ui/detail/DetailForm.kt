@@ -5,54 +5,25 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.supportform.ui.theme.GrayBlue
-import com.example.supportform.ui.theme.Red
+import com.example.supportform.data.model.Comment
+import com.example.supportform.data.model.TicketDetail
 import com.example.supportform.ui.theme.Teal
-
-// модели
-data class CommentUI(
-    val id: Int,
-    val author: String,
-    val text: String,
-    val time: String,
-    val isMine: Boolean
-)
-
-data class TicketDetailUI(
-    val id: Int,
-    val title: String,
-    val description: String,
-    val status: String,
-    val comments: List<CommentUI>
-)
+import com.example.supportform.ui.theme.Red
+import com.example.supportform.ui.theme.GrayBlue
 
 @Composable
 fun DetailForm(
+    ticket: TicketDetail,
     onBackClick: () -> Unit,
     onSendComment: (String) -> Unit
 ) {
-    // заглушки
-    val ticket = TicketDetailUI(
-        id = 1,
-        title = "Не работает принтер",
-        description = "Не могу распечатать документ, принтер не реагирует.",
-        status = "OPEN",
-        comments = listOf(
-            CommentUI(1, "Оператор", "Здравствуйте! Проверьте подключение к сети.", "12.09 12:30", false),
-            CommentUI(2, "Вы", "Проверил, всё подключено.", "12.09 12:35", true),
-            CommentUI(3, "Оператор", "Вызовите мастера по телефону 123.", "12.09 12:40", false)
-        )
-    )
-
     val commentText = remember { mutableStateOf("") }
 
     Column(
@@ -60,7 +31,7 @@ fun DetailForm(
             .fillMaxSize()
             .statusBarsPadding()
     ) {
-        // Кнопка "назад", заголовок, статус обращения
+        // Верхняя панель
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shadowElevation = 4.dp,
@@ -71,7 +42,6 @@ fun DetailForm(
                     .fillMaxWidth()
                     .padding(16.dp)
             ) {
-                // Кнопка назад
                 TextButton(
                     onClick = onBackClick,
                     modifier = Modifier.padding(bottom = 8.dp)
@@ -79,20 +49,18 @@ fun DetailForm(
                     Text("← Назад")
                 }
 
-                // Заголовок и статус
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = ticket.title,
+                        text = ticket.subject,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
                     )
                     StatusChipDetail(status = ticket.status)
                 }
 
-                // Описание
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = ticket.description,
@@ -107,15 +75,14 @@ fun DetailForm(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            reverseLayout = false
+                .padding(horizontal = 16.dp)
         ) {
             items(ticket.comments) { comment ->
                 CommentItem(comment = comment)
             }
         }
 
-        // Поле ввода комментария
+        // Поле ввода
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shadowElevation = 8.dp,
@@ -129,7 +96,7 @@ fun DetailForm(
             ) {
                 OutlinedTextField(
                     value = commentText.value,
-                    onValueChange = { newText -> commentText.value = newText },
+                    onValueChange = { commentText.value = it },
                     label = { Text("Введите сообщение...") },
                     modifier = Modifier
                         .weight(1f)
@@ -157,11 +124,11 @@ fun DetailForm(
     }
 }
 
-// Комментарий
 @Composable
-fun CommentItem(comment: CommentUI) {
-    val alignment = if (comment.isMine) Alignment.End else Alignment.Start
-    val color = if (comment.isMine) Teal else GrayBlue
+fun CommentItem(comment: Comment) {
+    val isMine = comment.author == "Вы"
+    val alignment = if (isMine) Alignment.End else Alignment.Start
+    val color = if (isMine) Teal else GrayBlue
 
     Column(
         modifier = Modifier
@@ -169,9 +136,8 @@ fun CommentItem(comment: CommentUI) {
             .padding(vertical = 8.dp),
         horizontalAlignment = alignment
     ) {
-        // Автор сообщения и время
         Row(
-            horizontalArrangement = if (comment.isMine) Arrangement.End else Arrangement.Start
+            horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start
         ) {
             Text(
                 text = comment.author,
@@ -181,7 +147,7 @@ fun CommentItem(comment: CommentUI) {
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = comment.time,
+                text = formatDate(comment.createdAt),
                 fontSize = 10.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -189,14 +155,13 @@ fun CommentItem(comment: CommentUI) {
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // Текст комментария
         Surface(
-            color = if (comment.isMine) Teal.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+            color = if (isMine) Teal.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
             shape = RoundedCornerShape(
                 topStart = 16.dp,
                 topEnd = 16.dp,
-                bottomStart = if (comment.isMine) 16.dp else 4.dp,
-                bottomEnd = if (comment.isMine) 4.dp else 16.dp
+                bottomStart = if (isMine) 16.dp else 4.dp,
+                bottomEnd = if (isMine) 4.dp else 16.dp
             ),
             modifier = Modifier
                 .widthIn(max = 280.dp)
@@ -211,13 +176,12 @@ fun CommentItem(comment: CommentUI) {
     }
 }
 
-// Чип статуса
 @Composable
 fun StatusChipDetail(status: String) {
     val color = when (status) {
         "OPEN" -> Red
         "IN_PROGRESS" -> Teal
-        "CLOSED" -> GrayBlue
+        "RESOLVED", "CLOSED" -> GrayBlue
         else -> Color.Gray
     }
 
@@ -229,12 +193,23 @@ fun StatusChipDetail(status: String) {
             text = when (status) {
                 "OPEN" -> "Открыто"
                 "IN_PROGRESS" -> "В работе"
-                "CLOSED" -> "Закрыто"
+                "RESOLVED", "CLOSED" -> "Закрыто"
                 else -> status
             },
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             fontSize = 12.sp,
             color = Color.White
         )
+    }
+}
+
+fun formatDate(dateStr: String): String {
+    return try {
+        val input = java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME
+        val output = java.time.format.DateTimeFormatter.ofPattern("dd.MM HH:mm")
+        val parsed = java.time.OffsetDateTime.parse(dateStr, input)
+        parsed.format(output)
+    } catch (e: Exception) {
+        dateStr
     }
 }

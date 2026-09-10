@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
+import com.example.supportform.data.model.Ticket
 
 // Модель
 data class TicketUI(
@@ -22,43 +23,27 @@ data class TicketUI(
 
 @Composable
 fun TicketsForm(
-    onTicketClick: (Int) -> Unit,
-    onLogoutClick: () -> Unit
+    onTicketClick: (String) -> Unit,
+    onLogoutClick: () -> Unit,
+    tickets: List<Ticket> // теперь принимает список
 ) {
-    // Заглушка
-    val tickets = listOf(
-        TicketUI(1, "Не работает принтер", "OPEN", "Ждём ответа от мастера", "12.09 14:30"),
-        TicketUI(2, "Проблема с Wi-Fi", "IN_PROGRESS", "Оператор подключился", "10.09 09:15"),
-        TicketUI(3, "Сброс пароля", "CLOSED", "Готово", "08.09 16:20")
-    )
-
     Column(
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding()
             .padding(16.dp)
     ) {
-        // Заголовок, кнопка выхода
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = "Мои обращения",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold
-            )
-            TextButton(onClick = onLogoutClick) {
-                Text("Выйти")
-            }
+            Text("Мои обращения", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            TextButton(onClick = onLogoutClick) { Text("Выйти") }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Список обращений
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(tickets) { ticket ->
                 TicketCard(
                     ticket = ticket,
@@ -69,55 +54,13 @@ fun TicketsForm(
     }
 }
 
-// Карточка обращения
 @Composable
-fun TicketCard(
-    ticket: TicketUI,
-    onClick: () -> Unit
-) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            // Строка: заголовок + статус
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = ticket.title,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                StatusChip(status = ticket.status)
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Последний комментарий
-            Text(
-                text = ticket.lastComment,
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Время обновления
-            Text(
-                text = ticket.updatedAt,
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+fun TicketCard(ticket: Ticket, onClick: () -> Unit) {
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(ticket.title, fontWeight = FontWeight.Medium)
+            Text("Статус: ${translateStatus(ticket.status)}")
+            Text("Обновлено: ${formatDate(ticket.updatedAt)}")
         }
     }
 }
@@ -142,5 +85,26 @@ fun StatusChip(status: String) {
             fontSize = 12.sp,
             color = Color.White
         )
+    }
+}
+
+fun formatDate(dateStr: String): String {
+    return try {
+        val input = java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME
+        val output = java.time.format.DateTimeFormatter.ofPattern("dd.MM HH:mm")
+        val parsed = java.time.OffsetDateTime.parse(dateStr, input)
+        parsed.format(output)
+    } catch (e: Exception) {
+        dateStr
+    }
+}
+
+fun translateStatus(status: String): String {
+    return when (status) {
+        "OPEN" -> "Открыто"
+        "IN_PROGRESS" -> "В работе"
+        "RESOLVED" -> "Закрыто"
+        "CLOSED" -> "Закрыто"
+        else -> status
     }
 }

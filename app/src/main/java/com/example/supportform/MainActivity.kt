@@ -8,6 +8,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import com.example.supportform.ui.AppNavigation
 import com.example.supportform.ui.theme.SupportFormTheme
 import com.example.supportform.ui.login.LoginForm
 import com.example.supportform.ui.detail.DetailForm
@@ -19,16 +20,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            SupportFormTheme {
-                DetailForm(
-                    onBackClick = {
-                        println("Назад")
-                    },
-                    onSendComment = { text ->
-                        println("Отправлен комментарий: $text")
-                    }
-                )
-            }
+            AppNavigation(context = this)
         }
     }
 }
