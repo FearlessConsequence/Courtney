@@ -10,8 +10,6 @@ class TokenManager(context: Context) {
 
     fun saveTokens(access: String, refresh: String) {
         println("💾 Сохраняем токены")
-        println("   Access: ${access.take(20)}...")
-        println("   Refresh: ${refresh.take(20)}...")
         prefs.edit()
             .putString("access_token", access)
             .putString("refresh_token", refresh)
@@ -19,20 +17,14 @@ class TokenManager(context: Context) {
     }
 
     fun getAccessToken(): String? {
-        val token = prefs.getString("access_token", null)
-        println("🔑 Читаем access: ${token?.take(20)}...")
-        return token
+        return prefs.getString("access_token", null)
     }
 
     fun getRefreshToken(): String? {
-        val token = prefs.getString("refresh_token", null)
-        println("🔑 Читаем refresh: ${token?.take(20)}...")
-        return token
+        return prefs.getString("refresh_token", null)
     }
 
     fun clearTokens() {
         prefs.edit().clear().apply()
     }
-
-
 }

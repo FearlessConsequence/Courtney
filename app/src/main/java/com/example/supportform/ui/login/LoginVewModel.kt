@@ -30,7 +30,10 @@ class LoginViewModel(
                 _state.value = _state.value.copy(isLoading = false, isSuccess = true)
             } catch (e: Exception) {
                 println("❌ Ошибка логина: ${e.message}")
-                _state.value = _state.value.copy(isLoading = false, error = e.message)
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    error = e.message ?: "Ошибка входа"
+                )
             }
         }
     }

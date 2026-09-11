@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.ui.unit.sp
 import com.example.supportform.data.model.Comment
 import com.example.supportform.data.model.TicketDetail
@@ -30,6 +31,7 @@ fun DetailForm(
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding()
+            .imePadding()
     ) {
         // Верхняя панель
         Surface(
@@ -49,19 +51,18 @@ fun DetailForm(
                     Text("← Назад")
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = ticket.subject,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    StatusChipDetail(status = ticket.status)
-                }
+                Text(
+                    text = ticket.subject,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
 
                 Spacer(modifier = Modifier.height(8.dp))
+
+                StatusChipDetail(status = ticket.status)
+
+                Spacer(modifier = Modifier.height(12.dp))
+
                 Text(
                     text = ticket.description,
                     fontSize = 14.sp,
@@ -126,7 +127,7 @@ fun DetailForm(
 
 @Composable
 fun CommentItem(comment: Comment) {
-    val isMine = comment.author == "Вы"
+    val isMine = comment.author.role == "CLIENT"
     val alignment = if (isMine) Alignment.End else Alignment.Start
     val color = if (isMine) Teal else GrayBlue
 
@@ -140,7 +141,7 @@ fun CommentItem(comment: Comment) {
             horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start
         ) {
             Text(
-                text = comment.author,
+                text = comment.author.displayName,   // <-- было comment.author
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = color
@@ -187,7 +188,8 @@ fun StatusChipDetail(status: String) {
 
     Surface(
         color = color,
-        shape = MaterialTheme.shapes.small
+        shape = MaterialTheme.shapes.small,
+        modifier = Modifier.wrapContentWidth()
     ) {
         Text(
             text = when (status) {
@@ -198,7 +200,9 @@ fun StatusChipDetail(status: String) {
             },
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             fontSize = 12.sp,
-            color = Color.White
+            color = Color.White,
+            maxLines = 1,
+            softWrap = false
         )
     }
 }

@@ -11,7 +11,8 @@ data class TicketDetail(
     val description: String,
     val status: String,
     @SerialName("updatedAt") val updatedAt: String,
-    val comments:  List<Comment> = emptyList()
+    val version: Long = 0,
+    val comments: List<Comment> = emptyList()
 )
 @Serializable
 data class Ticket(
@@ -28,11 +29,39 @@ data class Ticket(
 data class Comment(
     val id: String,
     val text: String,
-    val author: String,
-    @SerialName("created_at") val createdAt: String
+    val author: Author,
+    @SerialName("createdAt") val createdAt: String,
+    val sequence: Long = 0
 )
 
 @Serializable
 data class TicketsResponse(
     val items: List<Ticket>
+)
+
+@Serializable
+data class SendCommentRequest(
+    val text: String,
+    @SerialName("clientRequestId") val clientRequestId: String
+)
+
+@Serializable
+data class CommentResponse(
+    val id: String = "",
+    val text: String = "",
+    val author: Author? = null,
+    val createdAt: String = ""
+)
+
+@Serializable
+data class Author(
+    val id: String,
+    val login: String,
+    val displayName: String,
+    val role: String
+)
+
+@Serializable
+data class CommentsResponse(
+    val items: List<Comment>
 )

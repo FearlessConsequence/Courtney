@@ -12,12 +12,29 @@ import androidx.compose.ui.text.font.FontWeight
 
 @Composable
 fun LoginForm(
-    onLoginClick: (String, String) -> Unit
+    viewModel: LoginViewModel,
+    onLoginSuccess: () -> Unit
 ) {
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    val state by viewModel.state.collectAsState()
+
+    // Успех — переход на список
+    LaunchedEffect(state.isSuccess) {
+        if (state.isSuccess) {
+            onLoginSuccess()
+            viewModel.resetState()
+        }
+    }
+
+    // Ошибка — показываем
+    LaunchedEffect(state.error) {
+        if (state.error != null) {
+            errorMessage = state.error
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -42,7 +59,7 @@ fun LoginForm(
             onValueChange = { username = it },
             label = { Text("Логин") },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading,
+            enabled = !state.isLoading,
             singleLine = true
         )
 
@@ -54,7 +71,7 @@ fun LoginForm(
             onValueChange = { password = it },
             label = { Text("Пароль") },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading,
+            enabled = !state.isLoading,
             singleLine = true,
             visualTransformation = PasswordVisualTransformation()
         )
@@ -73,21 +90,20 @@ fun LoginForm(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Вход
+        // Кнопка входа
         Button(
             onClick = {
                 if (username.isBlank() || password.isBlank()) {
                     errorMessage = "Заполните все поля"
                     return@Button
                 }
-                isLoading = true
                 errorMessage = null
-                onLoginClick(username, password)
+                viewModel.login(username, password)
             },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+            enabled = !state.isLoading
         ) {
-            if (isLoading) {
+            if (state.isLoading) {
                 CircularProgressIndicator(modifier = Modifier.size(20.dp))
             } else {
                 Text("Войти")

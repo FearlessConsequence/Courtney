@@ -24,7 +24,44 @@ import com.example.supportform.ui.detail.DetailForm
 import com.example.supportform.ui.login.LoginForm
 import com.example.supportform.ui.login.LoginViewModel
 import com.example.supportform.utils.TokenManager
+import androidx.compose.runtime.rememberCoroutineScope
+import com.example.supportform.data.api.AuthApi
+import com.example.supportform.utils.RefreshManager
+import kotlinx.coroutines.launch
 
+
+suspend fun <T> withRefresh(
+    tokenManager: TokenManager,
+    authApi: AuthApi,
+    navController: androidx.navigation.NavController,
+    block: suspend (String) -> T
+): T? {
+    var token = tokenManager.getAccessToken() ?: return null
+    return try {
+        block(token)
+    } catch (e: Exception) {
+        // Если упало — пробуем refresh и повторяем один раз
+        val refreshed = RefreshManager.refreshIfNeeded(tokenManager, authApi, token)
+        if (refreshed) {
+            val newToken = tokenManager.getAccessToken()
+            if (newToken != null) {
+                try {
+                    block(newToken)
+                } catch (e2: Exception) {
+                    println("❌ Повторный запрос не удался: ${e2.message}")
+                    null
+                }
+            } else null
+        } else {
+            // Refresh не удался — на экран входа
+            tokenManager.clearTokens()
+            navController.navigate("login") {
+                popUpTo("login") { inclusive = true }
+            }
+            null
+        }
+    }
+}
 
 @Composable
 fun AppNavigation(context: Context) {
@@ -39,43 +76,25 @@ fun AppNavigation(context: Context) {
     ) {
         composable("login") {
             LoginForm(
-                onLoginClick = { username, password ->
-                    viewModel.login(username, password)
-                }
-            )
-
-            val state by viewModel.state.collectAsState()
-            LaunchedEffect(state.isSuccess) {
-                if (state.isSuccess) {
+                viewModel = viewModel,
+                onLoginSuccess = {
                     navController.navigate("tickets") {
                         popUpTo("login") { inclusive = true }
                     }
-                    viewModel.resetState()
                 }
-            }
+            )
         }
 
         composable("tickets") {
-            val ticketsApi = NetworkModule.provideTicketsApi()
-            val token = tokenManager.getAccessToken()
             var tickets by remember { mutableStateOf<List<Ticket>>(emptyList()) }
             var isLoading by remember { mutableStateOf(true) }
 
             LaunchedEffect(Unit) {
-                val token = tokenManager.getAccessToken()
-                println("🔑 Токен перед запросом списка: ${token?.take(20)}...")
-
-                if (token != null) {
-                    try {
-                        println("📤 Запрашиваем список...")
-                        val response = ticketsApi.getTickets(token)
-                        println("📦 Получено ${response.items.size} обращений")
-                        tickets = response.items
-                    } catch (e: Exception) {
-                        println("❌ Ошибка загрузки: ${e.message}")
-                    }
-                } else {
-                    println("⚠️ Токен null — выходим на логин")
+                withRefresh(tokenManager, authApi, navController) { token ->
+                    val api = NetworkModule.provideTicketsApi()
+                    val response = api.getTickets(token)
+                    tickets = response.items
+                    println("📦 Получено ${response.items.size} обращений")
                 }
                 isLoading = false
             }
@@ -103,18 +122,16 @@ fun AppNavigation(context: Context) {
 
         composable("detail/{ticketId}") { backStackEntry ->
             val ticketId = backStackEntry.arguments?.getString("ticketId") ?: return@composable
-            val token = tokenManager.getAccessToken()
             var detail by remember { mutableStateOf<TicketDetail?>(null) }
             var isLoading by remember { mutableStateOf(true) }
 
-            LaunchedEffect(Unit) {
-                if (token != null) {
-                    try {
-                        val api = NetworkModule.provideTicketsApi()
-                        detail = api.getTicketDetail(token, ticketId)
-                    } catch (e: Exception) {
-                        println("Ошибка загрузки деталей: ${e.message}")
-                    }
+            LaunchedEffect(ticketId) {
+                withRefresh(tokenManager, authApi, navController) { token ->
+                    val api = NetworkModule.provideTicketsApi()
+                    val ticket = api.getTicketDetail(token, ticketId)
+                    val comments = api.getComments(token, ticketId)
+                    detail = ticket.copy(comments = comments)
+                    println("✅ Загружено: ${comments.size} комментариев")
                 }
                 isLoading = false
             }
@@ -124,11 +141,26 @@ fun AppNavigation(context: Context) {
                     CircularProgressIndicator()
                 }
             } else if (detail != null) {
+                val scope = rememberCoroutineScope()
+
                 DetailForm(
                     ticket = detail!!,
-                    onBackClick = { navController.popBackStack() },
+                    onBackClick = {
+                        navController.navigate("tickets") {
+                            popUpTo("tickets") { inclusive = true }
+                        }
+                    },
                     onSendComment = { text ->
-                        println("Отправлен комментарий: $text")
+                        scope.launch {
+                            withRefresh(tokenManager, authApi, navController) { token ->
+                                val api = NetworkModule.provideTicketsApi()
+                                api.sendComment(token, ticketId, text)
+                                val ticket = api.getTicketDetail(token, ticketId)
+                                val comments = api.getComments(token, ticketId)
+                                detail = ticket.copy(comments = comments)
+                                println("✅ Комментарий отправлен")
+                            }
+                        }
                     }
                 )
             }

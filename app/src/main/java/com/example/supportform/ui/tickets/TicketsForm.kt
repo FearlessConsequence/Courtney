@@ -5,6 +5,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -56,7 +61,22 @@ fun TicketsForm(
 
 @Composable
 fun TicketCard(ticket: Ticket, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+    var canClick by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        canClick = false
+        kotlinx.coroutines.delay(300)
+        canClick = true
+    }
+
+    Card(
+        onClick = {
+            if (canClick) {
+                onClick()
+            }
+        },
+        modifier = Modifier.fillMaxWidth()
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(ticket.title, fontWeight = FontWeight.Medium)
             Text("Статус: ${translateStatus(ticket.status)}")

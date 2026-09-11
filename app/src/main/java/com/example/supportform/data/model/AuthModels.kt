@@ -26,3 +26,7 @@ data class User(
     @SerialName("displayName") val displayName: String,
     val role: String
 )
+@Serializable
+data class RefreshRequest(
+    val refreshToken: String
+)
