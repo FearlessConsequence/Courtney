@@ -23,9 +23,11 @@ import com.example.supportform.ui.theme.GrayBlue
 fun DetailForm(
     ticket: TicketDetail,
     onBackClick: () -> Unit,
-    onSendComment: (String) -> Unit
+    onSendComment: (String, (Boolean) -> Unit) -> Unit
 ) {
     val commentText = remember { mutableStateOf("") }
+    var sendError by remember { mutableStateOf<String?>(null) }
+    var isSending by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -83,6 +85,18 @@ fun DetailForm(
             }
         }
 
+        // Ошибка отправки
+        if (sendError != null) {
+            Text(
+                text = sendError!!,
+                color = MaterialTheme.colorScheme.error,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+        }
+
         // Поле ввода
         Surface(
             modifier = Modifier.fillMaxWidth(),
@@ -103,22 +117,41 @@ fun DetailForm(
                         .weight(1f)
                         .padding(end = 8.dp),
                     shape = RoundedCornerShape(24.dp),
-                    maxLines = 3
+                    maxLines = 3,
+                    enabled = !isSending
                 )
 
                 Button(
                     onClick = {
-                        if (commentText.value.isNotBlank()) {
-                            onSendComment(commentText.value)
-                            commentText.value = ""
+                        if (commentText.value.isNotBlank() && !isSending) {
+                            val text = commentText.value
+                            isSending = true
+                            sendError = null
+
+                            onSendComment(text) { success ->
+                                isSending = false
+                                if (success) {
+                                    commentText.value = ""
+                                } else {
+                                    sendError = "Не удалось отправить. Попробуйте ещё раз."
+                                }
+                            }
                         }
                     },
                     shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Teal
-                    )
+                    ),
+                    enabled = !isSending
                 ) {
-                    Text("📤")
+                    if (isSending) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = Color.White
+                        )
+                    } else {
+                        Text("📤")
+                    }
                 }
             }
         }
@@ -141,7 +174,7 @@ fun CommentItem(comment: Comment) {
             horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start
         ) {
             Text(
-                text = comment.author.displayName,   // <-- было comment.author
+                text = comment.author.displayName,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = color

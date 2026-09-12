@@ -17,7 +17,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import com.example.supportform.data.model.Ticket
 
-// Модель
 data class TicketUI(
     val id: Int,
     val title: String,

@@ -5,11 +5,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -17,19 +19,19 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.supportclient.ui.tickets.TicketsForm
+import com.example.supportform.data.api.AuthApi
 import com.example.supportform.data.api.NetworkModule
-import com.example.supportform.data.model.Ticket
+import com.example.supportform.data.api.UnauthorizedException
+import com.example.supportform.data.api.WebSocketManager
+import com.example.supportform.data.database.AppDatabase
 import com.example.supportform.data.model.TicketDetail
+import com.example.supportform.data.repository.TicketRepository
+import com.example.supportform.data.repository.toModel
 import com.example.supportform.ui.detail.DetailForm
 import com.example.supportform.ui.login.LoginForm
 import com.example.supportform.ui.login.LoginViewModel
-import com.example.supportform.utils.TokenManager
-import androidx.compose.runtime.rememberCoroutineScope
-import com.example.supportform.data.api.AuthApi
-import com.example.supportform.data.database.AppDatabase
-import com.example.supportform.data.repository.TicketRepository
-import com.example.supportform.data.repository.toModel
 import com.example.supportform.utils.RefreshManager
+import com.example.supportform.utils.TokenManager
 import kotlinx.coroutines.launch
 
 
@@ -43,21 +45,23 @@ suspend fun <T> withRefresh(
     return try {
         block(token)
     } catch (e: Exception) {
-        // Если  не 401 — просто выход, не трогая токен
         if (!isUnauthorized(e)) {
             println("⚠️ Сетевая ошибка, оставляем токен: ${e.message}")
             return null
         }
 
-        // Только 401 - обновление
         val refreshed = RefreshManager.refreshIfNeeded(tokenManager, authApi, token)
         if (refreshed) {
             val newToken = tokenManager.getAccessToken()
             if (newToken != null) {
-                try { block(newToken) } catch (e2: Exception) { null }
+                try {
+                    block(newToken)
+                } catch (e2: Exception) {
+                    println("❌ Повторный запрос не удался: ${e2.message}")
+                    null
+                }
             } else null
         } else {
-            // Обноавление провалилорсь — на авторизацию
             tokenManager.clearTokens()
             navController.navigate("login") {
                 popUpTo("login") { inclusive = true }
@@ -68,9 +72,9 @@ suspend fun <T> withRefresh(
 }
 
 fun isUnauthorized(e: Exception): Boolean {
-    val msg = e.message?.lowercase() ?: return false
-    return msg.contains("401") || msg.contains("unauthorized")
+    return e is UnauthorizedException
 }
+
 
 @Composable
 fun AppNavigation(context: Context) {
@@ -82,19 +86,84 @@ fun AppNavigation(context: Context) {
     val ticketsApi = remember { NetworkModule.provideTicketsApi() }
     val repository = remember { TicketRepository(ticketsApi, db) }
 
+    val wsManager = remember { WebSocketManager("ws://10.0.2.2:8080") }
+    val scope = rememberCoroutineScope()
+
     val startDestination = if (tokenManager.getAccessToken() != null) "tickets" else "login"
+
+    // Подключение WebSocket один раз
+    LaunchedEffect(Unit) {
+        val token = tokenManager.getAccessToken()
+        if (token != null) {
+            wsManager.connect(
+                scope = scope,
+                getToken = { tokenManager.getAccessToken() },
+                onCommentCreated = { ticketId ->
+                    scope.launch {
+                        try {
+                            val tk = tokenManager.getAccessToken() ?: return@launch
+                            repository.refreshTicketDetail(tk, ticketId)
+                        } catch (e: Exception) {
+                            println("❌ Ошибка обновления: ${e.message}")
+                        }
+                    }
+                },
+                onStatusChanged = { ticketId ->
+                    scope.launch {
+                        try {
+                            val tk = tokenManager.getAccessToken() ?: return@launch
+                            repository.refreshTicketDetail(tk, ticketId)
+                        } catch (e: Exception) {
+                            println("❌ Ошибка обновления: ${e.message}")
+                        }
+                    }
+                }
+            )
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            wsManager.disconnect()
+        }
+    }
 
     NavHost(
         navController = navController,
         startDestination = startDestination
-    ){
+    ) {
         composable("login") {
             LoginForm(
                 viewModel = viewModel,
                 onLoginSuccess = {
-                    navController.navigate("tickets") {
-                        popUpTo("login") { inclusive = true }
+                    val token = tokenManager.getAccessToken()
+                    if (token != null) {
+                        wsManager.connect(
+                            scope = scope,
+                            getToken = { tokenManager.getAccessToken() },
+                            onCommentCreated = { ticketId ->
+                                scope.launch {
+                                    try {
+                                        val tk = tokenManager.getAccessToken() ?: return@launch
+                                        repository.refreshTicketDetail(tk, ticketId)
+                                    } catch (e: Exception) {
+                                        println("❌ Ошибка обновления: ${e.message}")
+                                    }
+                                }
+                            },
+                            onStatusChanged = { ticketId ->
+                                scope.launch {
+                                    try {
+                                        val tk = tokenManager.getAccessToken() ?: return@launch
+                                        repository.refreshTicketDetail(tk, ticketId)
+                                    } catch (e: Exception) {
+                                        println("❌ Ошибка обновления: ${e.message}")
+                                    }
+                                }
+                            }
+                        )
                     }
+                    navController.navigate("tickets")
                 }
             )
         }
@@ -123,6 +192,7 @@ fun AppNavigation(context: Context) {
                         navController.navigate("detail/$ticketId")
                     },
                     onLogoutClick = {
+                        wsManager.disconnect()
                         tokenManager.clearTokens()
                         navController.navigate("login") {
                             popUpTo("login") { inclusive = true }
@@ -154,8 +224,6 @@ fun AppNavigation(context: Context) {
                     CircularProgressIndicator()
                 }
             } else if (ticket != null) {
-                val scope = rememberCoroutineScope()
-
                 val detail = TicketDetail(
                     id = ticket!!.id,
                     title = ticket!!.title,
@@ -173,11 +241,12 @@ fun AppNavigation(context: Context) {
                             popUpTo("tickets") { inclusive = true }
                         }
                     },
-                    onSendComment = { text ->
+                    onSendComment = { text, onResult ->
                         scope.launch {
-                            withRefresh(tokenManager, authApi, navController) { token ->
+                            val result = withRefresh(tokenManager, authApi, navController) { token ->
                                 repository.sendComment(token, ticketId, text)
                             }
+                            onResult(result != null)
                         }
                     }
                 )
