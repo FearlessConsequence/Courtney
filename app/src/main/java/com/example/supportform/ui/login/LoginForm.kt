@@ -21,7 +21,6 @@ fun LoginForm(
 
     val state by viewModel.state.collectAsState()
 
-    // Успех — переход на список
     LaunchedEffect(state.isSuccess) {
         if (state.isSuccess) {
             onLoginSuccess()
@@ -29,7 +28,6 @@ fun LoginForm(
         }
     }
 
-    // Ошибка — показываем
     LaunchedEffect(state.error) {
         if (state.error != null) {
             errorMessage = state.error

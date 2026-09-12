@@ -52,7 +52,7 @@ fun DetailForm(
                 }
 
                 Text(
-                    text = ticket.subject,
+                    text = ticket.title,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
                 )

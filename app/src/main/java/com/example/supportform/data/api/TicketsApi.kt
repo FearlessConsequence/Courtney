@@ -35,7 +35,7 @@ class TicketsApi(
         return response
     }
 
-    suspend fun sendComment(token: String, ticketId: String, text: String): CommentResponse {
+    suspend fun sendComment(token: String, ticketId: String, text: String): Comment {
         val request = SendCommentRequest(
             text = text,
             clientRequestId = java.util.UUID.randomUUID().toString()

@@ -26,6 +26,9 @@ import com.example.supportform.ui.login.LoginViewModel
 import com.example.supportform.utils.TokenManager
 import androidx.compose.runtime.rememberCoroutineScope
 import com.example.supportform.data.api.AuthApi
+import com.example.supportform.data.database.AppDatabase
+import com.example.supportform.data.repository.TicketRepository
+import com.example.supportform.data.repository.toModel
 import com.example.supportform.utils.RefreshManager
 import kotlinx.coroutines.launch
 
@@ -36,24 +39,25 @@ suspend fun <T> withRefresh(
     navController: androidx.navigation.NavController,
     block: suspend (String) -> T
 ): T? {
-    var token = tokenManager.getAccessToken() ?: return null
+    val token = tokenManager.getAccessToken() ?: return null
     return try {
         block(token)
     } catch (e: Exception) {
-        // Если упало — пробуем refresh и повторяем один раз
+        // Если  не 401 — просто выход, не трогая токен
+        if (!isUnauthorized(e)) {
+            println("⚠️ Сетевая ошибка, оставляем токен: ${e.message}")
+            return null
+        }
+
+        // Только 401 - обновление
         val refreshed = RefreshManager.refreshIfNeeded(tokenManager, authApi, token)
         if (refreshed) {
             val newToken = tokenManager.getAccessToken()
             if (newToken != null) {
-                try {
-                    block(newToken)
-                } catch (e2: Exception) {
-                    println("❌ Повторный запрос не удался: ${e2.message}")
-                    null
-                }
+                try { block(newToken) } catch (e2: Exception) { null }
             } else null
         } else {
-            // Refresh не удался — на экран входа
+            // Обноавление провалилорсь — на авторизацию
             tokenManager.clearTokens()
             navController.navigate("login") {
                 popUpTo("login") { inclusive = true }
@@ -63,17 +67,27 @@ suspend fun <T> withRefresh(
     }
 }
 
+fun isUnauthorized(e: Exception): Boolean {
+    val msg = e.message?.lowercase() ?: return false
+    return msg.contains("401") || msg.contains("unauthorized")
+}
+
 @Composable
 fun AppNavigation(context: Context) {
     val navController = rememberNavController()
     val authApi = NetworkModule.provideAuthApi()
     val tokenManager = TokenManager(context)
     val viewModel = LoginViewModel(authApi, tokenManager)
+    val db = remember { AppDatabase.getInstance(context) }
+    val ticketsApi = remember { NetworkModule.provideTicketsApi() }
+    val repository = remember { TicketRepository(ticketsApi, db) }
+
+    val startDestination = if (tokenManager.getAccessToken() != null) "tickets" else "login"
 
     NavHost(
         navController = navController,
-        startDestination = "login"
-    ) {
+        startDestination = startDestination
+    ){
         composable("login") {
             LoginForm(
                 viewModel = viewModel,
@@ -86,18 +100,17 @@ fun AppNavigation(context: Context) {
         }
 
         composable("tickets") {
-            var tickets by remember { mutableStateOf<List<Ticket>>(emptyList()) }
             var isLoading by remember { mutableStateOf(true) }
 
             LaunchedEffect(Unit) {
                 withRefresh(tokenManager, authApi, navController) { token ->
-                    val api = NetworkModule.provideTicketsApi()
-                    val response = api.getTickets(token)
-                    tickets = response.items
-                    println("📦 Получено ${response.items.size} обращений")
+                    repository.refreshTickets(token)
                 }
                 isLoading = false
             }
+
+            val ticketsFlow = remember { repository.getTicketsFlow() }
+            val tickets by ticketsFlow.collectAsState(initial = emptyList())
 
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -105,9 +118,8 @@ fun AppNavigation(context: Context) {
                 }
             } else {
                 TicketsForm(
-                    tickets = tickets,
+                    tickets = tickets.map { it.toModel() },
                     onTicketClick = { ticketId ->
-                        println("Клик по тикету: $ticketId")
                         navController.navigate("detail/$ticketId")
                     },
                     onLogoutClick = {
@@ -122,29 +134,40 @@ fun AppNavigation(context: Context) {
 
         composable("detail/{ticketId}") { backStackEntry ->
             val ticketId = backStackEntry.arguments?.getString("ticketId") ?: return@composable
-            var detail by remember { mutableStateOf<TicketDetail?>(null) }
             var isLoading by remember { mutableStateOf(true) }
 
             LaunchedEffect(ticketId) {
                 withRefresh(tokenManager, authApi, navController) { token ->
-                    val api = NetworkModule.provideTicketsApi()
-                    val ticket = api.getTicketDetail(token, ticketId)
-                    val comments = api.getComments(token, ticketId)
-                    detail = ticket.copy(comments = comments)
-                    println("✅ Загружено: ${comments.size} комментариев")
+                    repository.refreshTicketDetail(token, ticketId)
                 }
                 isLoading = false
             }
+
+            val ticketFlow = remember(ticketId) { repository.getTicketFlow(ticketId) }
+            val commentsFlow = remember(ticketId) { repository.getCommentsFlow(ticketId) }
+
+            val ticket by ticketFlow.collectAsState(initial = null)
+            val comments by commentsFlow.collectAsState(initial = emptyList())
 
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
-            } else if (detail != null) {
+            } else if (ticket != null) {
                 val scope = rememberCoroutineScope()
 
+                val detail = TicketDetail(
+                    id = ticket!!.id,
+                    title = ticket!!.title,
+                    description = ticket!!.description,
+                    status = ticket!!.status,
+                    updatedAt = ticket!!.updatedAt,
+                    version = ticket!!.version,
+                    comments = comments.map { it.toModel() }
+                )
+
                 DetailForm(
-                    ticket = detail!!,
+                    ticket = detail,
                     onBackClick = {
                         navController.navigate("tickets") {
                             popUpTo("tickets") { inclusive = true }
@@ -153,12 +176,7 @@ fun AppNavigation(context: Context) {
                     onSendComment = { text ->
                         scope.launch {
                             withRefresh(tokenManager, authApi, navController) { token ->
-                                val api = NetworkModule.provideTicketsApi()
-                                api.sendComment(token, ticketId, text)
-                                val ticket = api.getTicketDetail(token, ticketId)
-                                val comments = api.getComments(token, ticketId)
-                                detail = ticket.copy(comments = comments)
-                                println("✅ Комментарий отправлен")
+                                repository.sendComment(token, ticketId, text)
                             }
                         }
                     }
